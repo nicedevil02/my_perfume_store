@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String?   @unique // تغییر به اختیاری برای ثبت‌نام با شماره تلفن
+  emailVerified  DateTime?
+  hashedPassword String?
+  phone          String?   @unique
+  image          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // فیلدهای جدید برای اطلاعات کاربر
+  nationalId  String? @unique
+  cardNumber  String?
+  shebaNumber String? @unique
+
+  accounts  Account[]
+  sessions  Session[]
+  orders    Order[]
+  reviews   Review[]
+  wishlist  Wishlist[]
+  addresses Address[] // اضافه شد
+  cart      Cart? // **اصلاح شد**: حذف @relation از این طرف
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts") // **مهم**: نام جدول برای سازگاری
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Category {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  slug        String            @unique
+  description String?           @db.Text
+  parentId    String? // For subcategories
+  parent      Category?         @relation("SubCategories", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  children    Category[]        @relation("SubCategories")
+  products    ProductCategory[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model Brand {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?   @db.Text
+  logoUrl     String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum ProductType {
+  PERFUME
+  GIFT_SET
+}
+
+model Product {
+  id            String                 @id @default(cuid())
+  name          String
+  slug          String                 @unique
+  description   String?
+  isVisible     Boolean                @default(true)
+  gender        GenderTarget? // تغییر به enum برای ثبات داده
+  concentration Concentration? // اضافه کردن فیلد غلظت
+  type          ProductType            @default(PERFUME)
+  scents        ProductScent[] // رابطه صریح با جدول میانی
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  brand         Brand                  @relation(fields: [brandId], references: [id])
+  brandId       String
+  variants      Variant[]
+  images        ProductImage[]
+  categories    ProductCategory[] // تغییر نام برای وضوح بیشتر
+  notes         ProductFragranceNote[] // تغییر نام برای وضوح بیشتر
+  reviews       Review[] // تغییر نام برای وضوح بیشتر
+  wishlist      Wishlist[]
+}
+
+model Scent {
+  id       String         @id @default(cuid())
+  name     String
+  category String
+  products ProductScent[] // رابطه صریح با جدول میانی
+}
+
+// جدول میانی صریح برای رفع تداخل نام جدول ضمنی
+model ProductScent {
+  productId String
+  scentId   String
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  scent   Scent   @relation(fields: [scentId], references: [id], onDelete: Cascade)
+
+  @@id([productId, scentId])
+  @@map("product_scent") // نام ثابت برای جلوگیری از تداخل
+}
+
+model Variant {
+  id        String  @id @default(cuid())
+  size      Int // حجم به میلی‌لیتر
+  price     Float
+  stock     Int     @default(0)
+  discount  Float? // درصد تخفیف
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+
+  cartItems CartItem[] // اضافه کردن رابطه با CartItem
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  isMain    Boolean @default(false) // To identify the primary image
+  order     Int     @default(0) // For ordering images in a gallery
+}
+
+enum Concentration {
+  PARFUM
+  EAU_DE_PARFUM
+  EAU_DE_TOILETTE
+  EAU_DE_COLOGNE
+  EAU_FRAICHE
+}
+
+enum GenderTarget {
+  MEN
+  WOMEN
+  UNISEX
+}
+
+model ProductCategory {
+  productId  String
+  categoryId String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+}
+
+model FragranceNote {
+  id           String                 @id @default(cuid())
+  name         String                 @unique // e.g., "Bergamot", "Vanilla", "Cedarwood"
+  description  String?                @db.Text
+  productNotes ProductFragranceNote[]
+}
+
+model ProductFragranceNote {
+  productId     String
+  noteId        String
+  noteType      FragranceNoteType // TOP, MIDDLE, BASE
+  product       Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  fragranceNote FragranceNote     @relation(fields: [noteId], references: [id], onDelete: Restrict) // Restrict deletion if used
+
+  @@id([productId, noteId, noteType])
+}
+
+enum FragranceNoteType {
+  TOP
+  MIDDLE
+  BASE
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  orderItems      OrderItem[]
+  totalAmount     Float
+  status          OrderStatus @default(PENDING)
+  shippingAddress String      @db.Text
+  billingAddress  String?     @db.Text
+  paymentMethod   String?
+  paymentId       String?     @unique // From payment gateway
+  transactionId   String?     @unique // From payment gateway
+  shippingMethod  String?
+  shippingCost    Float?      @default(0)
+  notes           String?     @db.Text // Customer notes
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId          String
+  // We don't directly relate to Product to keep historical data if product is deleted/changed
+  // Instead, store product details at the time of order
+  productName        String
+  productBrand       String?
+  productVariantSize String? // e.g., "100ml"
+  productImage       String?
+
+  quantity        Int
+  priceAtPurchase Float // Price per unit at the time of purchase
+
+  @@index([orderId])
+}
+
+enum OrderStatus {
+  PENDING // Order placed, awaiting payment or processing
+  PROCESSING // Payment received, order being processed
+  SHIPPED // Order shipped
+  DELIVERED // Order delivered
+  CANCELLED // Order cancelled
+  REFUNDED // Order refunded
+  FAILED // Payment failed or other issue
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  text      String
+  rating    Int
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId]) // User can review a product only once
+  @@index([productId])
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId], name: "wishlist_user_product_unique")
+}
+
+model VerificationCode {
+  id         String   @id @default(cuid())
+  identifier String
+  code       String
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([identifier, used, expiresAt], name: "idx_identifier_used_expires")
+}
+
+model Address {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title         String // مثلا "منزل"، "محل کار"
+  receiverName  String
+  receiverPhone String
+  province      String
+  city          String
+  postalCode    String
+  address       String  @db.Text
+  isDefault     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, isDefault])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String?    @unique
+  sessionId String?    @unique // برای مهمان‌ها (guest checkout)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade) // **صحیح**: فقط این طرف دارای fields و references
+
+  @@index([sessionId])
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variantId String
+  variant   Variant  @relation(fields: [variantId], references: [id])
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, variantId])
+  @@index([cartId])
+}

@@ -1,0 +1,17 @@
+---
+name: Kimi K2 0711 (free)
+version: 1.1.0
+schema: v1
+models:
+  - name: Kimi K2 0711 (free) 
+    provider: openrouter
+    model: moonshotai/kimi-k2:free
+    apiKey: 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
+    defaultCompletionOptions:
+      contextLength: 262144
+    capabilities:
+      - tool_use
+    roles:
+      - apply
+      - chat
+      - edit
